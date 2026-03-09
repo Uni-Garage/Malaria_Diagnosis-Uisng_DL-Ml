@@ -6,7 +6,7 @@ from data_preprocessing import load_data
 
 train_data, test_data = load_data()
 
-model = load_model("../models/resnet_model.h5")
+model = load_model("../models/vgg_model.h5")
 
 pred = model.predict(test_data)
 pred = np.round(pred)
