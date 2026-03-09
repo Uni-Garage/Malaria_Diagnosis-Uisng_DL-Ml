@@ -1,1 +1,33 @@
+<!DOCTYPE html>
+<html>
+<head>
+<title>Malaria Detection using CNN</title>
+</head>
 
+<body style="text-align:center;font-family:Arial">
+
+<h1>Malaria Detection System</h1>
+
+<h3>Upload Blood Cell Image</h3>
+
+<form method="POST" enctype="multipart/form-data">
+
+<input type="file" name="file" required>
+<br><br>
+
+<button type="submit">Predict</button>
+
+</form>
+
+<br>
+
+{% if img_path %}
+
+<img src="{{img_path}}" width="250">
+
+<h2>{{result}}</h2>
+
+{% endif %}
+
+</body>
+</html>
