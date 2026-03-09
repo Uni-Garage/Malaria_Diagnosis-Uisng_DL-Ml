@@ -1,0 +1,10 @@
+print("===================================")
+print("Malaria Detection Using CNN")
+print("Models Used: VGG16 and ResNet50")
+print("===================================")
+
+print("Steps:")
+print("1. Prepare dataset")
+print("2. Run src/train.py")
+print("3. Run src/evaluate.py")
+print("4. Run src/predict.py for testing images")
