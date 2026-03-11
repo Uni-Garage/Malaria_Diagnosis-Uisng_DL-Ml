@@ -1,0 +1,542 @@
+Below is a clean professional project structure for your Malaria Detection using Deep Learning project based on the code you shared. This will make your project look well organized for GitHub, viva, or submission. The model detects Malaria from blood smear images using CNN and transfer learning with VGG19.
+
+📁 Complete Project Folder Hierarchy
+malaria-detection-project/
+│
+├── dataset/
+│   └── Malaria_dataset/
+│       ├── Parasitized/
+│       │   ├── img1.png
+│       │   ├── img2.png
+│       │   └── ...
+│       │
+│       └── Uninfected/
+│           ├── img1.png
+│           ├── img2.png
+│           └── ...
+│
+├── models/
+│   ├── cnn_scratch.py
+│   ├── vgg_frozen.py
+│   └── vgg_finetuned.py
+│
+├── preprocessing/
+│   ├── load_dataset.py
+│   ├── split_dataset.py
+│   └── data_generator.py
+│
+├── utils/
+│   ├── config.py
+│   └── plot_metrics.py
+│
+├── train.py
+├── evaluate.py
+├── requirements.txt
+└── README.md
+⚙️ 1️⃣ config.py
+
+Central configuration file.
+
+import os
+
+BASE_DIR = "dataset/Malaria_dataset"
+
+PARASITIZED_DIR = os.path.join(BASE_DIR, "Parasitized")
+UNINFECTED_DIR = os.path.join(BASE_DIR, "Uninfected")
+
+INPUT_SHAPE = (125,125,3)
+
+BATCH_SIZE = 64
+EPOCHS = 25
+NUM_CLASSES = 2
+
+MODEL_SAVE_PATH = "saved_models/"
+📂 2️⃣ load_dataset.py
+
+Loads file paths and labels.
+
+import glob
+import pandas as pd
+from utils.config import PARASITIZED_DIR, UNINFECTED_DIR
+
+def load_dataset():
+
+    infected_files = glob.glob(PARASITIZED_DIR + "/*.png")
+    healthy_files = glob.glob(UNINFECTED_DIR + "/*.png")
+
+    files_df = pd.DataFrame({
+        "filename": infected_files + healthy_files,
+        "label": ["malaria"] * len(infected_files) + ["healthy"] * len(healthy_files)
+    })
+
+    files_df = files_df.sample(frac=1, random_state=42).reset_index(drop=True)
+
+    return files_df
+📂 3️⃣ split_dataset.py
+
+Splits dataset.
+
+from sklearn.model_selection import train_test_split
+from collections import Counter
+
+def split_dataset(files_df):
+
+    train_files, test_files, train_labels, test_labels = train_test_split(
+        files_df["filename"].values,
+        files_df["label"].values,
+        test_size=0.3,
+        random_state=42
+    )
+
+    train_files, val_files, train_labels, val_labels = train_test_split(
+        train_files,
+        train_labels,
+        test_size=0.1,
+        random_state=42
+    )
+
+    print("Train:", Counter(train_labels))
+    print("Validation:", Counter(val_labels))
+    print("Test:", Counter(test_labels))
+
+    return train_files, val_files, test_files, train_labels, val_labels, test_labels
+📂 4️⃣ data_generator.py
+
+Handles image preprocessing + augmentation.
+
+import tensorflow as tf
+from utils.config import BATCH_SIZE
+
+def get_generators(train_data, val_data, train_labels_enc, val_labels_enc):
+
+    train_datagen = tf.keras.preprocessing.image.ImageDataGenerator(
+        rescale=1./255,
+        zoom_range=0.05,
+        rotation_range=25,
+        width_shift_range=0.05,
+        height_shift_range=0.05,
+        shear_range=0.05,
+        horizontal_flip=True,
+        fill_mode='nearest'
+    )
+
+    val_datagen = tf.keras.preprocessing.image.ImageDataGenerator(rescale=1./255)
+
+    train_generator = train_datagen.flow(
+        train_data,
+        train_labels_enc,
+        batch_size=BATCH_SIZE,
+        shuffle=True
+    )
+
+    val_generator = val_datagen.flow(
+        val_data,
+        val_labels_enc,
+        batch_size=BATCH_SIZE,
+        shuffle=False
+    )
+
+    return train_generator, val_generator
+🧠 5️⃣ cnn_scratch.py
+
+CNN built from scratch.
+
+import tensorflow as tf
+from utils.config import INPUT_SHAPE
+
+def build_cnn():
+
+    inp = tf.keras.layers.Input(shape=INPUT_SHAPE)
+
+    conv1 = tf.keras.layers.Conv2D(32,(3,3),activation='relu',padding='same')(inp)
+    pool1 = tf.keras.layers.MaxPooling2D((2,2))(conv1)
+
+    conv2 = tf.keras.layers.Conv2D(64,(3,3),activation='relu',padding='same')(pool1)
+    pool2 = tf.keras.layers.MaxPooling2D((2,2))(conv2)
+
+    conv3 = tf.keras.layers.Conv2D(128,(3,3),activation='relu',padding='same')(pool2)
+    pool3 = tf.keras.layers.MaxPooling2D((2,2))(conv3)
+
+    flat = tf.keras.layers.Flatten()(pool3)
+
+    dense1 = tf.keras.layers.Dense(512,activation='relu')(flat)
+    drop1 = tf.keras.layers.Dropout(0.3)(dense1)
+
+    dense2 = tf.keras.layers.Dense(512,activation='relu')(drop1)
+    drop2 = tf.keras.layers.Dropout(0.3)(dense2)
+
+    out = tf.keras.layers.Dense(1,activation='sigmoid')(drop2)
+
+    model = tf.keras.Model(inp,out)
+
+    model.compile(
+        optimizer="adam",
+        loss="binary_crossentropy",
+        metrics=["accuracy"]
+    )
+
+    return model
+🚀 6️⃣ vgg_frozen.py
+
+Transfer learning model.
+
+import tensorflow as tf
+from utils.config import INPUT_SHAPE
+
+def build_vgg_frozen():
+
+    vgg = tf.keras.applications.VGG19(
+        include_top=False,
+        weights="imagenet",
+        input_shape=INPUT_SHAPE
+    )
+
+    vgg.trainable = False
+
+    x = tf.keras.layers.Flatten()(vgg.output)
+
+    x = tf.keras.layers.Dense(512,activation='relu')(x)
+    x = tf.keras.layers.Dropout(0.3)(x)
+
+    x = tf.keras.layers.Dense(512,activation='relu')(x)
+    x = tf.keras.layers.Dropout(0.3)(x)
+
+    out = tf.keras.layers.Dense(1,activation='sigmoid')(x)
+
+    model = tf.keras.Model(vgg.input,out)
+
+    model.compile(
+        optimizer=tf.keras.optimizers.RMSprop(learning_rate=1e-4),
+        loss="binary_crossentropy",
+        metrics=["accuracy"]
+    )
+
+    return model
+🔬 7️⃣ vgg_finetuned.py
+
+Fine-tuned model.
+
+import tensorflow as tf
+from utils.config import INPUT_SHAPE
+
+def build_vgg_finetuned():
+
+    vgg = tf.keras.applications.VGG19(
+        include_top=False,
+        weights="imagenet",
+        input_shape=INPUT_SHAPE
+    )
+
+    vgg.trainable = True
+
+    set_trainable = False
+
+    for layer in vgg.layers:
+
+        if layer.name in ["block5_conv1","block4_conv1"]:
+            set_trainable = True
+
+        layer.trainable = set_trainable
+
+    x = tf.keras.layers.Flatten()(vgg.output)
+
+    x = tf.keras.layers.Dense(512,activation="relu")(x)
+    x = tf.keras.layers.Dropout(0.3)(x)
+
+    x = tf.keras.layers.Dense(512,activation="relu")(x)
+    x = tf.keras.layers.Dropout(0.3)(x)
+
+    out = tf.keras.layers.Dense(1,activation="sigmoid")(x)
+
+    model = tf.keras.Model(vgg.input,out)
+
+    model.compile(
+        optimizer=tf.keras.optimizers.RMSprop(learning_rate=1e-5),
+        loss="binary_crossentropy",
+        metrics=["accuracy"]
+    )
+
+    return model
+🏋️ 8️⃣ train.py
+
+Main training script.
+
+from preprocessing.load_dataset import load_dataset
+from preprocessing.split_dataset import split_dataset
+from models.vgg_finetuned import build_vgg_finetuned
+
+files_df = load_dataset()
+
+train_files, val_files, test_files, train_labels, val_labels, test_labels = split_dataset(files_df)
+
+model = build_vgg_finetuned()
+
+model.summary()
+
+model.fit(
+    train_data,
+    train_labels,
+    epochs=25,
+    validation_data=(val_data,val_labels)
+)
+
+model.save("models/vgg_finetuned.h5")
+📊 9️⃣ plot_metrics.py
+import matplotlib.pyplot as plt
+
+def plot_history(history):
+
+    plt.plot(history.history["accuracy"])
+    plt.plot(history.history["val_accuracy"])
+
+    plt.title("Model Accuracy")
+    plt.xlabel("Epoch")
+    plt.ylabel("Accuracy")
+
+    plt.legend(["Train","Validation"])
+
+    plt.show()
+📦 requirements.txt
+tensorflow
+numpy
+pandas
+matplotlib
+scikit-learn
+opencv-python
+⭐ Final Workflow
+Load Dataset
+      ↓
+Create DataFrame
+      ↓
+Train / Validation / Test Split
+      ↓
+Image Preprocessing
+      ↓
+Data Augmentation
+      ↓
+Model Training
+      ↓
+Model Evaluation
+      ↓
+Save Model
+
+✅ If you want, I can also show you how to convert this project into a small web app using Flask so judges can upload a blood cell image and instantly detect malaria. It makes your project 10× more impressive in expo.
+
+give
+
+Perfect! Let’s turn your Malaria Detection project into a simple web app using Flask, so judges or users can upload a blood smear image and instantly see the result. This makes your expo project look very professional.
+
+📁 Folder Hierarchy for Flask Web App
+malaria-detection-webapp/
+│
+├── app.py                 # Main Flask app
+├── templates/
+│   └── index.html         # Upload page
+├── static/
+│   └── uploads/           # Uploaded images will be saved here
+├── models/
+│   └── vgg_finetuned.h5   # Your trained model
+├── utils/
+│   └── predict.py         # Image preprocessing and prediction code
+├── requirements.txt
+└── README.md
+1️⃣ app.py — Main Flask App
+from flask import Flask, render_template, request
+import os
+from werkzeug.utils import secure_filename
+from utils.predict import predict_image
+from utils.config import MODEL_PATH
+
+UPLOAD_FOLDER = 'static/uploads'
+
+app = Flask(__name__)
+app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
+
+# Home Page
+@app.route('/')
+def home():
+    return render_template('index.html')
+
+# Handle Image Upload and Prediction
+@app.route('/predict', methods=['POST'])
+def predict():
+    if 'file' not in request.files:
+        return "No file uploaded", 400
+    file = request.files['file']
+    if file.filename == '':
+        return "No selected file", 400
+
+    filename = secure_filename(file.filename)
+    filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+    file.save(filepath)
+
+    # Make prediction
+    prediction, confidence = predict_image(filepath, MODEL_PATH)
+
+    return render_template('index.html', filename=filename,
+                           prediction=prediction,
+                           confidence=confidence)
+
+if __name__ == '__main__':
+    app.run(debug=True)
+2️⃣ templates/index.html — Upload Page
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Malaria Detection</title>
+    <style>
+        body { font-family: Arial; text-align:center; margin-top:50px;}
+        img { max-width:300px; margin-top:20px;}
+        input[type=file] { margin-top:20px; }
+        button { margin-top:10px; padding:10px 20px; }
+    </style>
+</head>
+<body>
+    <h1>Malaria Detection from Blood Smear Image</h1>
+    <form action="/predict" method="post" enctype="multipart/form-data">
+        <input type="file" name="file" required>
+        <br>
+        <button type="submit">Predict</button>
+    </form>
+
+    {% if filename %}
+        <h2>Uploaded Image:</h2>
+        <img src="{{ url_for('static', filename='uploads/' + filename) }}" alt="Uploaded Image">
+        <h2>Prediction: {{ prediction }}</h2>
+        <h3>Confidence: {{ confidence }}%</h3>
+    {% endif %}
+</body>
+</html>
+3️⃣ utils/predict.py — Preprocessing and Prediction
+import tensorflow as tf
+import numpy as np
+from tensorflow.keras.preprocessing import image
+
+def predict_image(img_path, model_path):
+    # Load model
+    model = tf.keras.models.load_model(model_path)
+
+    # Load image
+    img = image.load_img(img_path, target_size=(125,125))
+    img_array = image.img_to_array(img)
+    img_array = img_array/255.0
+    img_array = np.expand_dims(img_array, axis=0)
+
+    # Predict
+    pred = model.predict(img_array)[0][0]
+
+    if pred > 0.5:
+        label = "Parasitized (Malaria)"
+    else:
+        label = "Uninfected (Healthy)"
+
+    confidence = round(pred*100 if pred > 0.5 else (1-pred)*100,2)
+
+    return label, confidence
+4️⃣ utils/config.py
+import os
+MODEL_PATH = os.path.join("models", "vgg_finetuned.h5")
+5️⃣ requirements.txt
+flask
+tensorflow
+numpy
+pandas
+opencv-python
+werkzeug
+✅ How It Works
+
+User opens the app in a browser (http://127.0.0.1:5000/)
+
+Uploads a blood smear image
+
+Flask saves it in static/uploads
+
+Model predicts if the image is Parasitized or Uninfected
+
+Prediction and confidence are displayed on the same page
+
+🎯 Tips for Expo
+
+Place your laptop next to your poster with the web app running
+
+Judge can upload a new image and see the model working in real time
+
+Adds WOW factor beyond just showing graphs or saved images
+
+If you want, I can also provide a ready-to-use script to run everything locally with one command so your expo demo is completely plug-and-play.
+
+Do you want me to do that?
+
+train.py", line 14, in <module>
+    train_data,
+    ^^^^^^^^^^
+NameError: name 'train_data' is not defined
+
+Ah! That error happens because in your current train.py you are calling train_data and val_data, but these variables are never created.
+
+In the code you shared earlier, you only split the filenames and labels, but you never loaded the actual images into numpy arrays. In Python/TensorFlow, you need to read each image file and convert it to a numpy array before passing it to model.fit().
+
+Here’s how to fix it:
+
+1️⃣ Load Images from File Paths
+
+Add this function in preprocessing/load_images.py:
+
+import numpy as np
+from tensorflow.keras.preprocessing import image
+from utils.config import INPUT_SHAPE
+
+def load_images(file_paths):
+    imgs = []
+    for fp in file_paths:
+        img = image.load_img(fp, target_size=INPUT_SHAPE[:2])
+        img_array = image.img_to_array(img)
+        img_array = img_array / 255.0   # normalize
+        imgs.append(img_array)
+    return np.array(imgs)
+2️⃣ Update train.py
+from preprocessing.load_dataset import load_dataset
+from preprocessing.split_dataset import split_dataset
+from preprocessing.load_images import load_images
+from models.vgg_finetuned import build_vgg_finetuned
+from sklearn.preprocessing import LabelEncoder
+
+# Load dataset
+files_df = load_dataset()
+train_files, val_files, test_files, train_labels, val_labels, test_labels = split_dataset(files_df)
+
+# Convert labels to numbers
+le = LabelEncoder()
+le.fit(train_labels)
+train_labels_enc = le.transform(train_labels)
+val_labels_enc = le.transform(val_labels)
+
+# Load images into numpy arrays
+train_data = load_images(train_files)
+val_data = load_images(val_files)
+
+# Build model
+model = build_vgg_finetuned()
+model.summary()
+
+# Train model
+history = model.fit(
+    train_data,
+    train_labels_enc,
+    batch_size=64,
+    epochs=25,
+    validation_data=(val_data, val_labels_enc)
+)
+
+# Save model
+model.save("models/vgg_finetuned.h5")
+
+✅ What this fixes:
+
+train_data and val_data now exist as numpy arrays of images.
+
+Normalization is applied (/255) so the model can train properly.
+
+Labels are encoded using LabelEncoder.
+
+💡 Tip: If your dataset is very large (like 27,000+ images), it’s better to use ImageDataGenerator to load images in batches instead of loading all into memory at once. Otherwise, you may run into memory errors.
