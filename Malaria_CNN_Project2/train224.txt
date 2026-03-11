@@ -1,0 +1,166 @@
+224×224 is actually the standard input size for most pretrained CNN models like VGG16, VGG19, ResNet, MobileNet, EfficientNet, so your model will work better and more consistently.
+
+I'll show you exactly what to change in your project.
+
+1️⃣ Change Image Size in config.py
+
+Open utils/config.py
+
+Change:
+
+INPUT_SHAPE = (125,125,3)
+
+to
+
+INPUT_SHAPE = (224,224,3)
+
+Full example:
+
+import os
+
+BASE_DIR = "dataset/Malaria_dataset"
+
+PARASITIZED_DIR = os.path.join(BASE_DIR, "Parasitized")
+UNINFECTED_DIR = os.path.join(BASE_DIR, "Uninfected")
+
+INPUT_SHAPE = (224,224,3)
+
+BATCH_SIZE = 32
+EPOCHS = 25
+NUM_CLASSES = 2
+
+MODEL_SAVE_PATH = "saved_models/"
+
+⚠ I reduced batch size to 32 because 224×224 images consume more GPU/CPU memory.
+
+2️⃣ Image Loader Already Supports It
+
+Your function already uses:
+
+img = image.load_img(fp, target_size=INPUT_SHAPE[:2])
+
+So once you change INPUT_SHAPE, images will automatically load as:
+
+224 x 224 x 3
+
+No changes needed there.
+
+3️⃣ VGG Model Already Supports 224
+
+Your model:
+
+vgg = tf.keras.applications.VGG19(
+    include_top=False,
+    weights="imagenet",
+    input_shape=INPUT_SHAPE
+)
+
+Now it will automatically use:
+
+224x224x3
+
+Perfect for VGG.
+
+4️⃣ Update Web App Preprocessing
+
+In app.py, update preprocessing:
+
+img = image.load_img(img_path, target_size=(224,224))
+
+or better:
+
+img = image.load_img(img_path, target_size=INPUT_SHAPE[:2])
+5️⃣ Retrain Model
+
+Run training again:
+
+python train.py
+
+Model will now train using:
+
+Input shape: 224x224x3
+
+And save:
+
+saved_models/vgg_finetuned.h5
+6️⃣ Expected Improvements
+
+Training with 224×224 may give:
+
+Metric	125×125	224×224
+Accuracy	~94–96%	~96–98%
+Feature quality	Medium	Better
+Compatibility	Limited	Standard
+
+Because the model sees more image detail.
+
+7️⃣ Optional Improvement (Recommended)
+
+Use VGG preprocessing:
+
+from tensorflow.keras.applications.vgg19 import preprocess_input
+
+Instead of:
+
+img_array = img_array / 255.0
+
+Use:
+
+img_array = preprocess_input(img_array)
+
+This matches how VGG was trained.
+
+8️⃣ Final Pipeline
+
+Your new pipeline becomes:
+
+Dataset Images
+     │
+     ▼
+Resize to 224x224
+     │
+     ▼
+Preprocess (VGG)
+     │
+     ▼
+VGG19 CNN
+     │
+     ▼
+Dense Layers
+     │
+     ▼
+Sigmoid Output
+     │
+     ▼
+Prediction (Malaria / Healthy)
+9️⃣ New Model Summary (Approx)
+Input: (224,224,3)
+
+VGG19 Base
+↓
+Flatten
+↓
+Dense 512
+↓
+Dropout
+↓
+Dense 512
+↓
+Dropout
+↓
+Sigmoid Output
+
+Total parameters ≈ 22M
+
+🔥 Recommended Upgrade (Important)
+
+Since you're already using 224×224, the best model for this dataset is actually:
+
+EfficientNetB0
+
+Better than VGG19:
+
+Model	Accuracy	Speed
+CNN	Medium	Fast
+VGG19	Good	Heavy
+EfficientNetB0	Best	Fast
